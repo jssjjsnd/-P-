@@ -1,0 +1,36 @@
+-- Infinite Nickname
+local nicknameAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = nicknameAddress, flags = gg.TYPE_STRING, value = "Infinite"}})
+
+-- Color Nickname
+local nicknameAddress = 0x12345678 -- Replace with the actual address
+local colorCode = "<color=ff0000>Infinite</color>" -- Replace with the desired color code
+gg.setValues({{address = nicknameAddress, flags = gg.TYPE_STRING, value = colorCode}})
+
+-- Faster Punching
+local punchSpeedAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = punchSpeedAddress, flags = gg.TYPE_FLOAT, value = 999999999}})
+
+-- Noclip
+local noclipAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = noclipAddress, flags = gg.TYPE_BYTE, value = 1}})
+
+-- ESP (Extra Sensory Perception)
+local espAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = espAddress, flags = gg.TYPE_BYTE, value = 1}})
+
+-- Unlimited Ammo
+local ammoAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = ammoAddress, flags = gg.TYPE_INT, value = 999999999}})
+
+-- Infinite Health
+local healthAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = healthAddress, flags = gg.TYPE_INT, value = 999999999}})
+
+-- Change Jump Power
+local jumpPowerAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = jumpPowerAddress, flags = gg.TYPE_FLOAT, value = 999999999}})
+
+-- Change Speed Power
+local speedPowerAddress = 0x12345678 -- Replace with the actual address
+gg.setValues({{address = speedPowerAddress, flags = gg.TYPE_FLOAT, value = 999999999}})
