@@ -1,1 +1,553 @@
-Do not mess
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>DRIFT ZONE — Multiplayer</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Share+Tech&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#080c10;
+  --surface:#0d1117;
+  --border:#1e2a38;
+  --accent:#00e5ff;
+  --yellow:#ffd600;
+  --green:#00ff88;
+  --red:#ff3d57;
+  --pink:#ff4daa;
+  --blue:#4da6ff;
+  --text:#c8d8e8;
+  --dim:#4a6070;
+  --font:'Share Tech Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text);}
+
+/* ══ SCREENS ══ */
+.screen{
+  position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:200;
+  background:var(--bg);gap:0;
+  animation:screenIn 0.3s ease;
+}
+.screen.hidden{display:none;}
+@keyframes screenIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+
+/* scanline overlay */
+.screen::before{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);
+  z-index:1;
+}
+.screen>*{position:relative;z-index:2;}
+
+/* corner brackets */
+.bracket{
+  position:absolute;width:40px;height:40px;z-index:3;
+  border-color:var(--accent);border-style:solid;opacity:0.4;
+}
+.bracket.tl{top:20px;left:20px;border-width:2px 0 0 2px;}
+.bracket.tr{top:20px;right:20px;border-width:2px 2px 0 0;}
+.bracket.bl{bottom:20px;left:20px;border-width:0 0 2px 2px;}
+.bracket.br{bottom:20px;right:20px;border-width:0 2px 2px 0;}
+
+.game-title{
+  font-size:32px;font-weight:400;letter-spacing:8px;
+  color:var(--accent);text-shadow:0 0 20px var(--accent),0 0 40px rgba(0,229,255,0.3);
+  margin-bottom:4px;
+}
+.game-sub{font-size:11px;letter-spacing:6px;color:var(--dim);margin-bottom:36px;}
+
+
+
+/* ── CONTROLS ── */
+.section-title{font-size:13px;letter-spacing:5px;color:var(--accent);margin-bottom:20px;text-align:center;}
+.ctrl-list{display:flex;flex-direction:column;gap:12px;width:300px;}
+.ctrl-item{
+  display:flex;align-items:center;gap:16px;padding:16px 20px;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  cursor:pointer;transition:all 0.15s;
+}
+.ctrl-item:active,.ctrl-item.sel{border-color:var(--accent);background:#0a1a22;color:var(--accent);}
+.ctrl-item .ci{font-size:20px;width:28px;text-align:center;}
+.ctrl-item .ct{font-size:12px;letter-spacing:3px;}
+
+/* ── USERNAME / LOBBY ── */
+.field-label{font-size:11px;letter-spacing:4px;color:var(--dim);margin-bottom:8px;margin-top:20px;}
+.txt-input{
+  width:300px;padding:14px 16px;border-radius:10px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font-family:var(--font);font-size:14px;letter-spacing:2px;
+  outline:none;text-align:center;transition:border 0.2s;
+}
+.txt-input:focus{border-color:var(--accent);}
+.btn-row{display:flex;gap:12px;margin-top:24px;}
+.btn{
+  padding:14px 28px;border-radius:10px;font-family:var(--font);
+  font-size:12px;letter-spacing:3px;cursor:pointer;border:none;
+  transition:all 0.15s;
+}
+.btn:active{transform:scale(0.96);}
+.btn.solid{background:var(--accent);color:#000;}
+.btn.outline{background:transparent;border:1px solid var(--accent);color:var(--accent);}
+#lobbyStatus{font-size:11px;letter-spacing:2px;color:var(--dim);margin-top:14px;text-align:center;max-width:300px;line-height:1.6;}
+.status-ok{color:var(--green)!important;}
+.status-err{color:var(--red)!important;}
+
+/* ══ GAME ══ */
+#gameCanvas{position:fixed;top:0;left:0;right:0;bottom:0;display:block;touch-action:none;}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;padding:10px 14px;display:flex;justify-content:space-between;z-index:30;pointer-events:none;}
+.hud-panel{
+  background:rgba(8,12,16,0.85);border:1px solid var(--border);
+  border-radius:10px;padding:8px 14px;backdrop-filter:blur(8px);
+}
+.hud-nick{font-size:10px;letter-spacing:3px;color:var(--accent);}
+.hud-speed{font-size:24px;color:#fff;line-height:1;}
+.hud-unit{font-size:9px;color:var(--dim);}
+.hud-room{font-size:9px;letter-spacing:2px;color:var(--dim);margin-top:2px;}
+.hud-online{font-size:11px;letter-spacing:2px;color:var(--green);text-align:right;}
+
+/* MINIMAP */
+#minimap{
+  position:fixed;bottom:140px;right:12px;
+  width:90px;height:90px;border-radius:10px;
+  background:rgba(8,12,16,0.85);border:1px solid var(--border);
+  z-index:30;overflow:hidden;
+}
+#minimapCanvas{display:block;}
+
+/* CHAT */
+#chatBox{
+  position:fixed;bottom:136px;left:10px;
+  width:calc(100% - 120px);z-index:30;
+  max-height:130px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:4px;pointer-events:none;
+}
+#chatBox::-webkit-scrollbar{display:none;}
+.chat-msg{
+  background:rgba(8,12,16,0.82);border-radius:8px;
+  padding:5px 10px;font-size:11px;color:var(--text);
+  border-left:2px solid var(--yellow);width:fit-content;max-width:90%;
+  animation:msgIn 0.25s ease;backdrop-filter:blur(4px);
+  font-family:var(--font);letter-spacing:0.5px;
+}
+.chat-msg.sys{border-left-color:var(--green);color:var(--green);font-style:italic;}
+.chat-msg .nick{color:var(--yellow);margin-right:6px;font-size:10px;}
+@keyframes msgIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:translateX(0);}}
+#chatBar{
+  position:fixed;bottom:86px;left:10px;right:10px;z-index:30;
+  display:flex;gap:8px;
+}
+#chatField{
+  flex:1;padding:10px 14px;border-radius:10px;
+  background:rgba(8,12,16,0.9);border:1px solid var(--border);
+  color:var(--text);font-family:var(--font);font-size:12px;
+  letter-spacing:1px;outline:none;transition:border 0.2s;
+}
+#chatField:focus{border-color:var(--yellow);}
+#chatSend{
+  padding:10px 16px;border-radius:10px;background:var(--yellow);
+  color:#000;font-family:var(--font);font-size:11px;letter-spacing:2px;
+  border:none;cursor:pointer;
+}
+
+/* CONTROLS */
+#btnControls{
+  display:none;position:fixed;bottom:10px;left:10px;z-index:30;
+  touch-action:none;
+}
+.dpad{display:grid;grid-template-columns:56px 56px 56px;grid-template-rows:56px 56px;gap:5px;}
+.db{
+  background:rgba(8,12,16,0.85);border:1px solid var(--border);
+  border-radius:12px;color:var(--text);font-size:22px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;pointer-events:all;user-select:none;-webkit-user-select:none;
+  transition:background 0.1s,border-color 0.1s;
+}
+.db:active,.db.pressed{background:rgba(0,229,255,0.15);border-color:var(--accent);}
+.du{grid-column:2;}.dl{grid-column:1;grid-row:2;}.dd{grid-column:2;grid-row:2;}.dr{grid-column:3;grid-row:2;}
+
+/* GAS/BRAKE */
+.action-btn{
+  position:fixed;bottom:20px;z-index:30;pointer-events:all;
+  width:72px;height:72px;border-radius:50%;display:none;
+  align-items:center;justify-content:center;
+  font-family:var(--font);font-size:10px;letter-spacing:1px;
+  border:2px solid;cursor:pointer;
+}
+#gasBtn{right:16px;background:rgba(0,255,136,0.15);color:var(--green);border-color:var(--green);}
+#brakeBtn{right:98px;background:rgba(255,61,87,0.15);color:var(--red);border-color:var(--red);}
+.action-btn:active{filter:brightness(1.4);}
+
+/* WHEEL */
+#wheelControl{
+  display:none;position:fixed;bottom:16px;
+  left:50%;transform:translateX(-50%);z-index:30;pointer-events:all;
+}
+.wheel-ring{
+  width:130px;height:130px;border-radius:50%;
+  border:5px solid var(--border);background:rgba(8,12,16,0.85);
+  display:flex;align-items:center;justify-content:center;position:relative;
+}
+.wheel-spoke{
+  position:absolute;width:3px;height:50px;background:var(--border);
+  border-radius:2px;top:8px;left:50%;transform:translateX(-50%);
+  transform-origin:50% 57px;transition:transform 0.05s;
+}
+.wheel-hub{width:36px;height:36px;border-radius:50%;background:var(--surface);border:2px solid var(--border);}
+
+/* TILT */
+#tiltHint{
+  display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:rgba(8,12,16,0.85);border:1px solid var(--border);border-radius:10px;
+  padding:8px 20px;font-size:10px;letter-spacing:3px;color:var(--accent);z-index:30;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ CONTROLS SCREEN ══ -->
+<div class="screen" id="sControls">
+  <div class="bracket tl"></div><div class="bracket tr"></div>
+  <div class="bracket bl"></div><div class="bracket br"></div>
+  <div class="section-title">CHOOSE CONTROLS</div>
+  <div class="ctrl-list">
+    <div class="ctrl-item" id="ci-buttons" onclick="pickCtrl('buttons',this)">
+      <span class="ci">🕹️</span><span class="ct">BUTTONS</span>
+    </div>
+    <div class="ctrl-item" id="ci-wheel" onclick="pickCtrl('wheel',this)">
+      <span class="ci">🎡</span><span class="ct">STEERING WHEEL</span>
+    </div>
+    <div class="ctrl-item" id="ci-tilt" onclick="pickCtrl('tilt',this)">
+      <span class="ci">📱</span><span class="ct">TILT</span>
+    </div>
+  </div>
+  <div class="btn-row"><button class="btn solid" onclick="goLobby()">NEXT →</button></div>
+</div>
+
+<!-- ══ LOBBY SCREEN ══ -->
+<div class="screen hidden" id="sLobby">
+  <div class="bracket tl"></div><div class="bracket tr"></div>
+  <div class="bracket bl"></div><div class="bracket br"></div>
+  <div class="section-title">JOIN OR CREATE ROOM</div>
+  <div class="field-label">USERNAME</div>
+  <input class="txt-input" id="nameField" maxlength="14" placeholder="YourName" autocomplete="off" spellcheck="false"/>
+  <div class="field-label">ROOM CODE</div>
+  <input class="txt-input" id="roomField" maxlength="8" placeholder="e.g. ZONE42" autocomplete="off" spellcheck="false" style="text-transform:uppercase"/>
+  <div class="btn-row">
+    <button class="btn solid" onclick="createRoom()">CREATE</button>
+    <button class="btn outline" onclick="joinRoom()">JOIN</button>
+  </div>
+  <div id="lobbyStatus">ENTER A ROOM CODE OR CREATE A NEW ONE</div>
+</div>
+
+<!-- ══ GAME ══ -->
+<canvas id="gameCanvas" class="hidden"></canvas>
+
+<div id="hud" class="hidden">
+  <div class="hud-panel">
+    <div class="hud-nick" id="hudNick">—</div>
+    <div class="hud-speed"><span id="hudSpd">0</span></div>
+    <div class="hud-unit">KM/H</div>
+  </div>
+  <div class="hud-panel" style="text-align:right">
+    <div class="hud-online" id="hudOnline">● 1 ONLINE</div>
+    <div class="hud-room" id="hudRoom"></div>
+  </div>
+</div>
+
+<canvas id="minimapCanvas" class="hidden" width="90" height="90"></canvas>
+
+<div id="chatBox" class="hidden"></div>
+<div id="chatBar" class="hidden">
+  <input type="text" id="chatField" placeholder="type a message..." maxlength="80" autocomplete="off"/>
+  <button id="chatSend" onclick="sendChat()">SEND</button>
+</div>
+
+<!-- BUTTON D-PAD -->
+<div id="btnControls">
+  <div class="dpad">
+    <div class="db du" id="bU">▲</div>
+    <div class="db dl" id="bL">◀</div>
+    <div class="db dd" id="bD">▼</div>
+    <div class="db dr" id="bR">▶</div>
+  </div>
+</div>
+
+<!-- GAS / BRAKE -->
+<button class="action-btn" id="gasBtn">GAS</button>
+<button class="action-btn" id="brakeBtn">BRAKE</button>
+
+<!-- STEERING WHEEL -->
+<div id="wheelControl">
+  <div class="wheel-ring" id="wheelRing">
+    <div class="wheel-spoke" id="wheelSpoke"></div>
+    <div class="wheel-hub"></div>
+  </div>
+</div>
+
+<!-- TILT HINT -->
+<div id="tiltHint">TILT TO STEER</div>
+
+<script>
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+const COLORS=['#4da6ff','#ff4daa','#00ff88','#ffd600','#ff3d57','#c77dff'];
+let carColor=COLORS[Math.floor(Math.random()*COLORS.length)], ctrlType='buttons', username='';
+let peer=null, peerId=null, roomCode='', isHost=false;
+let conns={}, remotes={};
+
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const mmCanvas=document.getElementById('minimapCanvas');
+const mmCtx=mmCanvas.getContext('2d');
+
+const WORLD=2400;
+let pl={x:WORLD/2,y:WORLD/2,angle:0,speed:0,steer:0};
+let keys={up:false,down:false,left:false,right:false};
+let tilt=0, camX=0, camY=0;
+let gameRunning=false;
+
+// ══════════════════════════════════════
+//  ONBOARDING
+// ══════════════════════════════════════
+function show(id){ document.getElementById(id).classList.remove('hidden'); }
+function hide(id){ document.getElementById(id).classList.add('hidden'); }
+function trans(from,to){ hide(from); show(to); }
+
+
+function pickCtrl(type, el){
+  ctrlType=type;
+  document.querySelectorAll('.ctrl-item').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function goLobby(){
+  if(!ctrlType) pickCtrl('buttons', document.getElementById('ci-buttons'));
+  trans('sControls','sLobby');
+  document.getElementById('nameField').focus();
+}
+
+// ══════════════════════════════════════
+//  PEERJS
+// ══════════════════════════════════════
+function setStatus(msg,cls=''){
+  const el=document.getElementById('lobbyStatus');
+  el.textContent=msg; el.className=cls;
+}
+
+function makePeer(fixedId){
+  return new Promise((res,rej)=>{
+    const p = fixedId ? new Peer(fixedId,{debug:0}) : new Peer({debug:0});
+    p.on('open', id=>{ peer=p; peerId=id; res(id); });
+    p.on('error', e=>rej(e));
+  });
+}
+
+function wireConn(conn){
+  conn.on('open',()=>{
+    conns[conn.peer]=conn;
+    updateOnline();
+    conn.send({t:'hello',name:username,color:carColor,x:pl.x,y:pl.y,angle:pl.angle});
+  });
+  conn.on('data',d=>onData(conn.peer,d));
+  conn.on('close',()=>{
+    const name=remotes[conn.peer]?.name||'Player';
+    delete conns[conn.peer]; delete remotes[conn.peer];
+    updateOnline(); sysMsg(name+' left the game');
+  });
+  conn.on('error',()=>{});
+}
+
+function onData(pid, d){
+  switch(d.t){
+    case 'hello':
+      remotes[pid]={x:d.x,y:d.y,angle:d.angle,color:d.color,name:d.name};
+      updateOnline(); sysMsg(d.name+' has connected');
+      // greet back if we haven't
+      if(conns[pid]) conns[pid].send({t:'hello',name:username,color:carColor,x:pl.x,y:pl.y,angle:pl.angle});
+      break;
+    case 'move':
+      if(remotes[pid]){remotes[pid].x=d.x;remotes[pid].y=d.y;remotes[pid].angle=d.angle;}
+      break;
+    case 'chat':
+      addMsg(d.name,d.msg);
+      break;
+  }
+}
+
+function bcast(data){
+  Object.values(conns).forEach(c=>{ try{c.send(data);}catch(e){} });
+}
+
+function updateOnline(){
+  const n=Object.keys(conns).length+1;
+  document.getElementById('hudOnline').textContent='● '+n+' ONLINE';
+}
+
+async function createRoom(){
+  username=document.getElementById('nameField').value.trim()||'Player'+(Math.random()*900|0+100);
+  const code=(document.getElementById('roomField').value.trim().toUpperCase())||
+    Math.random().toString(36).substring(2,8).toUpperCase();
+  roomCode=code;
+  setStatus('CONNECTING...','');
+  try{
+    await makePeer('DZ-'+roomCode);
+    peer.on('connection',conn=>wireConn(conn));
+    peer.on('error',e=>setStatus('ERROR: '+e.type,'status-err'));
+    document.getElementById('roomField').value=roomCode;
+    setStatus('ROOM: '+roomCode+' — WAITING FOR PLAYERS...','status-ok');
+    isHost=true;
+    // Start immediately as host
+    enterGame();
+  }catch(e){
+    if(e.type==='unavailable-id') setStatus('ROOM "'+code+'" ALREADY EXISTS — TRY JOIN','status-err');
+    else setStatus('CONNECTION ERROR','status-err');
+  }
+}
+
+async function joinRoom(){
+  username=document.getElementById('nameField').value.trim()||'Player'+(Math.random()*900|0+100);
+  roomCode=document.getElementById('roomField').value.trim().toUpperCase();
+  if(!roomCode){setStatus('ENTER A ROOM CODE FIRST','status-err');return;}
+  setStatus('CONNECTING TO '+roomCode+'...','');
+  try{
+    await makePeer(null);
+    peer.on('error',e=>setStatus('COULD NOT JOIN: '+e.type,'status-err'));
+    const conn=peer.connect('DZ-'+roomCode,{reliable:true});
+    wireConn(conn);
+    conn.on('open',()=>{ enterGame(); });
+    setTimeout(()=>{
+      if(!gameRunning) setStatus('COULD NOT REACH ROOM "'+roomCode+'"','status-err');
+    },6000);
+  }catch(e){ setStatus('CONNECTION ERROR','status-err'); }
+}
+
+// ══════════════════════════════════════
+//  GAME INIT
+// ══════════════════════════════════════
+const spots=[], walls=[], trees=[], roadLines=[];
+
+function buildWorld(){
+  // Parking rows
+  for(let r=0;r<8;r++) for(let c=0;c<10;c++)
+    spots.push({x:250+c*180,y:180+r*220,w:80,h:140});
+
+  // Boundary walls
+  walls.push(
+    {x:0,y:0,w:WORLD,h:20},
+    {x:0,y:WORLD-20,w:WORLD,h:20},
+    {x:0,y:0,w:20,h:WORLD},
+    {x:WORLD-20,y:0,w:20,h:WORLD}
+  );
+
+  // Buildings (corners)
+  [{x:40,y:40,w:260,h:160},{x:WORLD-300,y:40,w:260,h:160},
+   {x:40,y:WORLD-200,w:260,h:160},{x:WORLD-300,y:WORLD-200,w:260,h:160},
+   {x:WORLD/2-120,y:40,w:240,h:100},{x:WORLD/2-120,y:WORLD-140,w:240,h:100}
+  ].forEach(b=>walls.push(b));
+
+  // Trees (decorative)
+  for(let i=0;i<40;i++)
+    trees.push({x:50+Math.random()*(WORLD-100),y:50+Math.random()*(WORLD-100),r:10+Math.random()*8});
+
+  // Road centre lines
+  for(let i=120;i<WORLD;i+=240){
+    roadLines.push({x1:i,y1:0,x2:i,y2:WORLD});
+    roadLines.push({x1:0,y1:i,x2:WORLD,y2:i});
+  }
+
+  // Spawn away from walls
+  pl.x=WORLD/2+(Math.random()*300-150);
+  pl.y=WORLD/2+(Math.random()*300-150);
+}
+
+function enterGame(){
+  gameRunning=true;
+  hide('sLobby');
+  show('gameCanvas'); canvas.classList.remove('hidden');
+  show('hud'); show('chatBox'); show('chatBar');
+  mmCanvas.classList.remove('hidden');
+  document.getElementById('minimapCanvas').style.cssText=
+    'position:fixed;bottom:140px;right:12px;width:90px;height:90px;border-radius:10px;background:rgba(8,12,16,0.85);border:1px solid #1e2a38;z-index:30;display:block;';
+  document.getElementById('hudNick').textContent=username.toUpperCase();
+  document.getElementById('hudRoom').textContent='ROOM: '+roomCode;
+
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+
+  buildWorld();
+  setupControls();
+  sysMsg(username+' has connected');
+  setInterval(()=>bcast({t:'move',x:pl.x,y:pl.y,angle:pl.angle}),50);
+  requestAnimationFrame(loop);
+}
+
+// ══════════════════════════════════════
+//  GAME LOOP
+// ══════════════════════════════════════
+function loop(){
+  update();
+  render();
+  drawMinimap();
+  requestAnimationFrame(loop);
+}
+
+function update(){
+  const MAX=7, ACCEL=0.32, FRIC=0.91, TURN=0.048;
+  let steer=0;
+  if(ctrlType==='tilt') steer=tilt*0.055;
+  else{ if(keys.left)steer=-TURN; if(keys.right)steer=TURN; }
+
+  if(keys.up) pl.speed=Math.min(pl.speed+ACCEL,MAX);
+  else if(keys.down) pl.speed=Math.max(pl.speed-ACCEL*1.2,-MAX*0.4);
+  else pl.speed*=FRIC;
+
+  if(Math.abs(pl.speed)>0.15) pl.angle+=steer*(Math.abs(pl.speed)/MAX);
+
+  const nx=pl.x+Math.sin(pl.angle)*pl.speed;
+  const ny=pl.y-Math.cos(pl.angle)*pl.speed;
+
+  // Wall collision (simple AABB)
+  let blocked=false;
+  for(const w of walls){
+    if(nx>w.x&&nx<w.x+w.w&&ny>w.y&&ny<w.y+w.h){ blocked=true; break; }
+  }
+  if(!blocked){ pl.x=Math.max(25,Math.min(WORLD-25,nx)); pl.y=Math.max(25,Math.min(WORLD-25,ny)); }
+  else{ pl.speed*=-0.4; }
+
+  camX=pl.x-canvas.width/2; camY=pl.y-canvas.height/2;
+  document.getElementById('hudSpd').textContent=Math.abs(Math.round(pl.speed*18));
+}
+
+// ══════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save(); ctx.translate(-camX,-camY);
+
+  // Ground
+  ctx.fillStyle='#0e1418'; ctx.fillRect(0,0,WORLD,WORLD);
+
+  // Grid asphalt texture
+  ctx.strokeStyle='#141c22'; ctx.lineWidth=1;
+  for(let i=0;i<WORLD;i+=80){
+    ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,WORLD);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(WORLD,i);ctx.stroke();
+  }
+
+  // Road centre dashes
+  ctx.setLineDash([24,18]);
+  ctx.strokeStyle='#1e2e1a'; ctx.lineWidth=2;
+  roadLines.forEach(l=>{ctx.beginPath();ctx.moveTo(l.x1,l.y1);ctx.lineTo(l.x2,l.y2);ctx.stroke();});
+  ctx.setLineDash([]);
+
+  // Parking spots
+  spots.forEach(s=>{
+    ctx.fillStyle='#111820'; ctx.fillRect(s.x,s.y,s.w,s.h);
+    ctx.strokeStyle='rgba(0,229,255,0.12)';
